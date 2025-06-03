@@ -111,10 +111,10 @@ class QLearningRobot : AdvancedRobot() {
 
     private fun doAction(action: Action) {
         when (action) {
-            Action.MOVE_FORWARD -> ahead(50.0)
-            Action.MOVE_BACKWARD -> back(50.0)
-            Action.ROTATE_LEFT -> turnLeft(90.0)
-            Action.ROTATE_RIGHT -> turnRight(90.0)
+            Action.MOVE_FORWARD -> ahead(10.0)
+            Action.MOVE_BACKWARD -> back(10.0)
+            Action.ROTATE_LEFT -> turnLeft(10.0)
+            Action.ROTATE_RIGHT -> turnRight(10.0)
         }
     }
 
