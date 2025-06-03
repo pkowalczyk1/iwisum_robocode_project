@@ -3,7 +3,7 @@
     <option name="MAIN_CLASS_NAME" value="robocode.Robocode" />
     <module name="robocode-project" />
     <option name="VM_PARAMETERS" value="-Xmx512M -Dsun.io.useCanonCaches=false -Ddebug=true -DNOSECURITY=true -Xdock:name=Robocode -Xdock:icon=robocode.ico -XX:+IgnoreUnrecognizedVMOptions &quot;--add-opens=java.base/sun.net.www.protocol.jar=ALL-UNNAMED&quot; &quot;--add-opens=java.base/java.lang.reflect=ALL-UNNAMED&quot; &quot;--add-opens=java.desktop/javax.swing.text=ALL-UNNAMED&quot; &quot;--add-opens=java.desktop/sun.awt=ALL-UNNAMED&quot;" />
-    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../../robocode" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../robocode" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

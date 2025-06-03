@@ -32,31 +32,34 @@ class QLearningRobot : AdvancedRobot() {
 
     override fun run() {
         try {
+            driver.sendResult(getResult(Action.MOVE_FORWARD))
             while (true) {
                 val action = driver.getAction()
                 doAction(action)
-                val observation = Observation(
-                    action = action.ordinal,
-                    xPos = x,
-                    yPos = y,
-                    energy = energy,
-                    velocity = velocity,
-                    enemyDistance = lastEnemyPosition?.distance(Position(x, y)),
-                    enemyHeading = lastEnemyPosition?.heading(Position(x, y)),
-                    wallHit = if (wallCollision) 1 else 0,
-                    robotHit = if (robotHit) 1 else 0
-                )
-                val result = Result(
-                    observation = observation,
-                    reward = getReward()
-                )
-
-                driver.sendResult(result)
+                driver.sendResult(getResult(action))
                 reset()
             }
         } catch (e: Exception) {
             println("Disconnected from server or round ended: ${e.message}")
         }
+    }
+
+    fun getResult(action: Action): Result {
+        val observation = Observation(
+            action = action.ordinal,
+            xPos = x,
+            yPos = y,
+            energy = energy,
+            velocity = velocity,
+            enemyDistance = lastEnemyPosition?.distance(Position(x, y)),
+            enemyHeading = lastEnemyPosition?.heading(Position(x, y)),
+            wallHit = if (wallCollision) 1 else 0,
+            robotHit = if (robotHit) 1 else 0
+        )
+        return Result(
+            observation = observation,
+            reward = getReward()
+        )
     }
 
     override fun onScannedRobot(event: ScannedRobotEvent?) {
