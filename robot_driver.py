@@ -2,6 +2,7 @@ import socket
 import json
 import numpy as np
 import tensorflow as tf
+from collections import deque
 
 # TF-Agents imports:
 from tf_agents.networks import q_network
@@ -9,6 +10,8 @@ from tf_agents.agents.dqn import dqn_agent
 from tf_agents.specs import array_spec
 from tf_agents.utils import common
 from tf_agents.trajectories import time_step as ts
+from tf_agents.trajectories import trajectory
+from tf_agents.trajectories import policy_step as ps
 
 # ------------------------------------------------------------
 # Helper: preprocess_observation
@@ -26,9 +29,37 @@ def preprocess_observation(obs_dict):
     return arr.reshape((1, -1))
 # ------------------------------------------------------------
 
+# Simple experience tuple
+class Experience:
+    def __init__(self, state, action, reward, next_state, done):
+        self.state = state
+        self.action = action
+        self.reward = reward
+        self.next_state = next_state
+        self.done = done
+
+# Simple Replay Buffer
+def make_replay_buffer(size=10000):
+    return deque(maxlen=size)
+
+# Sample a minibatch from buffer
+def sample_batch(buffer, batch_size=32):
+    indices = np.random.choice(len(buffer), size=min(len(buffer), batch_size), replace=False)
+    batch = [buffer[i] for i in indices]
+    states = np.vstack([b.state for b in batch])
+    actions = np.array([b.action for b in batch], dtype=np.int32)
+    rewards = np.array([b.reward for b in batch], dtype=np.float32)
+    next_states = np.vstack([b.next_state for b in batch])
+    dones = np.array([b.done for b in batch], dtype=np.float32)
+    return states, actions, rewards, next_states, dones
+
+
 def main():
     host = 'localhost'
     port = 5000
+
+    replay_buffer = make_replay_buffer(size=10000)
+    batch_size = 32
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
@@ -85,23 +116,25 @@ def main():
                     ckpt_dir=checkpoint_dir,
                     agent=agent
                 )
-                # Try to restore from last checkpoint, if available
                 ckpt.initialize_or_restore()
                 print("TF-Agents DQN Agent loaded from (or initialized at)", checkpoint_dir)
                 policy = agent.policy
 
+                prev_state_np = state_np
+                prev_action = None
+                prev_reward = None
                 while True:
                     step_type = tf.constant([ts.StepType.MID], dtype=tf.int32)
                     reward    = tf.constant([0.0], dtype=tf.float32)
                     discount  = tf.constant([1.0], dtype=tf.float32)
                     obs_tensor = tf.convert_to_tensor(state_np)
-                    time_step = ts.TimeStep(
+                    time_step_obj = ts.TimeStep(
                         step_type=step_type,
                         reward=reward,
                         discount=discount,
                         observation=obs_tensor
                     )
-                    action_step = policy.action(time_step)
+                    action_step = policy.action(time_step_obj)
                     action = int(action_step.action.numpy()[0])
                     print("Action:", action)
                     output_stream.write(f"{action}\n")
@@ -115,7 +148,64 @@ def main():
                         break
                     next_obs = json.loads(next_obs_json)
                     print("Received observation:", next_obs)
-                    state_np = preprocess_observation(next_obs)
+                    next_state_np = preprocess_observation(next_obs)
+                    reward_val = float(next_obs.get("reward", 0.0))
+                    done = False  # You can add a real done flag if your env provides it
+
+                    # Add experience to replay buffer
+                    if prev_action is not None:
+                        exp = Experience(prev_state_np, prev_action, prev_reward, state_np, done)
+                        replay_buffer.append(exp)
+
+                        # Train after each step if enough data
+                        if len(replay_buffer) >= batch_size:
+                            states, actions, rewards, next_states, dones = sample_batch(replay_buffer, batch_size)
+                            # Convert to tensors
+                            states = tf.convert_to_tensor(states, dtype=tf.float32)
+                            actions = tf.convert_to_tensor(actions, dtype=tf.int32)
+                            rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
+                            next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
+                            dones = tf.convert_to_tensor(dones, dtype=tf.float32)
+
+                            # Expand dims to add time axis
+                            def add_time_dim(x):
+                                return tf.expand_dims(x, axis=1)
+
+                            states = add_time_dim(states)
+                            actions = add_time_dim(actions)
+                            rewards = add_time_dim(rewards)
+                            next_states = add_time_dim(next_states)
+                            dones = add_time_dim(dones)
+
+                            # Make TimeSteps for [B, T, ...]
+                            time_steps = ts.TimeStep(
+                                step_type=tf.constant([[ts.StepType.MID]] * batch_size, dtype=tf.int32),
+                                reward=rewards,
+                                discount=tf.constant([[1.0]] * batch_size, dtype=tf.float32),
+                                observation=states
+                            )
+                            next_time_steps = ts.TimeStep(
+                                step_type=tf.constant([[ts.StepType.MID]] * batch_size, dtype=tf.int32),
+                                reward=tf.zeros_like(rewards),  # not used
+                                discount=tf.constant([[1.0]] * batch_size, dtype=tf.float32),
+                                observation=next_states
+                            )
+
+                            # PolicyStep shape [B, T, ...]
+                            policy_step = ps.PolicyStep(action=actions, info=())
+
+                            exp_traj = trajectory.from_transition(
+                                time_step=time_steps,
+                                action_step=policy_step,
+                                next_time_step=next_time_steps
+                            )
+
+                            agent.train(exp_traj)
+                    # Store for next step
+                    prev_state_np = state_np
+                    prev_action = action
+                    prev_reward = reward_val
+                    state_np = next_state_np
 
 if __name__ == '__main__':
     main()
