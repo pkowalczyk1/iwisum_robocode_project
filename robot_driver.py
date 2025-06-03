@@ -161,45 +161,49 @@ def main():
                         if len(replay_buffer) >= batch_size:
                             states, actions, rewards, next_states, dones = sample_batch(replay_buffer, batch_size)
                             # Convert to tensors
-                            states = tf.convert_to_tensor(states, dtype=tf.float32)
-                            actions = tf.convert_to_tensor(actions, dtype=tf.int32)
-                            rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-                            next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
-                            dones = tf.convert_to_tensor(dones, dtype=tf.float32)
+                            batch_size = states.shape[0]
 
-                            # Expand dims to add time axis
-                            def add_time_dim(x):
-                                return tf.expand_dims(x, axis=1)
+                            # Prepare T=2 (sequence_length=2) batches
+                            states_seq = np.stack([states, next_states], axis=1)         # [batch, 2, obs_dim]
+                            actions_seq = np.stack([actions, actions], axis=1)           # [batch, 2]
+                            rewards_seq = np.stack([rewards, np.zeros_like(rewards)], axis=1)  # [batch, 2]
+                            discounts_seq = np.ones_like(rewards_seq, dtype=np.float32)         # [batch, 2]
 
-                            states = add_time_dim(states)
-                            actions = add_time_dim(actions)
-                            rewards = add_time_dim(rewards)
-                            next_states = add_time_dim(next_states)
-                            dones = add_time_dim(dones)
+                            # Convert to tensors
+                            states_seq = tf.convert_to_tensor(states_seq, dtype=tf.float32)
+                            actions_seq = tf.convert_to_tensor(actions_seq, dtype=tf.int32)
+                            rewards_seq = tf.convert_to_tensor(rewards_seq, dtype=tf.float32)
+                            discounts_seq = tf.convert_to_tensor(discounts_seq, dtype=tf.float32)
 
-                            # Make TimeSteps for [B, T, ...]
-                            time_steps = ts.TimeStep(
-                                step_type=tf.constant([[ts.StepType.MID]] * batch_size, dtype=tf.int32),
-                                reward=rewards,
-                                discount=tf.constant([[1.0]] * batch_size, dtype=tf.float32),
-                                observation=states
+                            # Both steps are MID for DQN (no terminal handling here, can be adjusted)
+                            step_types = tf.constant([[ts.StepType.MID, ts.StepType.MID]] * batch_size, dtype=tf.int32)
+
+                            # TimeStep objects for t0 and t1
+                            train_time_steps = ts.TimeStep(
+                                step_type=step_types,
+                                reward=rewards_seq,
+                                discount=discounts_seq,
+                                observation=states_seq
                             )
+                            # Next time steps are not actually used by DQN loss, but fill for API
                             next_time_steps = ts.TimeStep(
-                                step_type=tf.constant([[ts.StepType.MID]] * batch_size, dtype=tf.int32),
-                                reward=tf.zeros_like(rewards),  # not used
-                                discount=tf.constant([[1.0]] * batch_size, dtype=tf.float32),
-                                observation=next_states
+                                step_type=step_types,
+                                reward=tf.zeros_like(rewards_seq),
+                                discount=discounts_seq,
+                                observation=states_seq  # or next_states_seq, either is fine here
                             )
 
-                            # PolicyStep shape [B, T, ...]
-                            policy_step = ps.PolicyStep(action=actions, info=())
+                            # PolicyStep (same action for both time steps)
+                            policy_steps = ps.PolicyStep(action=actions_seq, info=())
 
+                            # Make trajectory
                             exp_traj = trajectory.from_transition(
-                                time_step=time_steps,
-                                action_step=policy_step,
+                                time_step=train_time_steps,
+                                action_step=policy_steps,
                                 next_time_step=next_time_steps
                             )
 
+                            # Training call
                             agent.train(exp_traj)
                     # Store for next step
                     prev_state_np = state_np
