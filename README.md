@@ -8,4 +8,4 @@
     pip install tf_agents
     python robot_driver.py 
 ```
-3. Try to run the application using the IntelliJ run configuration (`Robocode`) - everything should work, and you should see the `QLearningRobot` in robocode
+4. Try to run the application using the IntelliJ run configuration (`Robocode`) - everything should work, and you should see the `QLearningRobot` in robocode

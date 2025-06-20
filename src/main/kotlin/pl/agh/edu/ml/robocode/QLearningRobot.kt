@@ -1,6 +1,7 @@
 package pl.agh.edu.ml.robocode
 
 import robocode.AdvancedRobot
+import robocode.BattleEndedEvent
 import robocode.BulletHitEvent
 import robocode.BulletMissedEvent
 import robocode.HitByBulletEvent
@@ -12,11 +13,17 @@ import robocode.ScannedRobotEvent
 import java.lang.Math.toDegrees
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 class QLearningRobot : AdvancedRobot() {
+
+    companion object {
+        private const val Y_MAX = 600
+        private const val X_MAX = 800
+    }
 
     private val driver = TcpRobotDriver()
 
@@ -27,16 +34,18 @@ class QLearningRobot : AdvancedRobot() {
     private var wallCollision: Boolean = false
     private var robotHit: Boolean = false
     private var dead: Boolean = false
+    private var battleEnded: Boolean = false
 
     private var lastEnemyPosition: Position? = null
 
     override fun run() {
         try {
-            driver.sendResult(getResult(Action.MOVE_FORWARD))
+//            turnRadarLeft(360.0)
+            driver.sendResult(getResult())
             while (true) {
                 val action = driver.getAction()
                 doAction(action)
-                driver.sendResult(getResult(action))
+                driver.sendResult(getResult())
                 reset()
             }
         } catch (e: Exception) {
@@ -44,17 +53,17 @@ class QLearningRobot : AdvancedRobot() {
         }
     }
 
-    fun getResult(action: Action): Result {
+    fun getResult(): Result {
         val observation = Observation(
-            action = action.ordinal,
             xPos = x,
             yPos = y,
+            heading = heading,
             energy = energy,
-            velocity = velocity,
             enemyDistance = lastEnemyPosition?.distance(Position(x, y)),
             enemyHeading = lastEnemyPosition?.heading(Position(x, y)),
             wallHit = if (wallCollision) 1 else 0,
-            robotHit = if (robotHit) 1 else 0
+            robotHit = if (robotHit) 1 else 0,
+            done = battleEnded
         )
         return Result(
             observation = observation,
@@ -62,11 +71,17 @@ class QLearningRobot : AdvancedRobot() {
         )
     }
 
+    override fun onBattleEnded(event: BattleEndedEvent?) {
+        battleEnded = true
+    }
+
     override fun onScannedRobot(event: ScannedRobotEvent?) {
         if (event == null) {
             return
         }
 
+        fire(5.0)
+        fire(5.0)
         fire(5.0)
         val enemyDistance = event.distance
         val enemyBearing = event.bearing
@@ -111,28 +126,47 @@ class QLearningRobot : AdvancedRobot() {
 
     private fun doAction(action: Action) {
         when (action) {
-            Action.MOVE_FORWARD -> ahead(10.0)
-            Action.MOVE_BACKWARD -> back(10.0)
-            Action.ROTATE_LEFT -> turnLeft(10.0)
-            Action.ROTATE_RIGHT -> turnRight(10.0)
+            Action.MOVE_FORWARD -> ahead(20.0)
+//            Action.MOVE_FAST_FORWARD -> ahead(40.0)
+            Action.MOVE_BACKWARD -> back(20.0)
+//            Action.MOVE_FAST_BACKWARD -> back(40.0)
+            Action.ROTATE_LEFT -> turnLeft(20.0)
+//            Action.ROTATE_MORE_LEFT -> turnLeft(50.0)
+            Action.ROTATE_RIGHT -> turnRight(20.0)
+//            Action.ROTATE_MORE_RIGHT -> turnRight(50.0)
+            Action.SCAN -> turnGunRight(360.0)
         }
     }
 
     private fun getReward(): Double {
-        val shotHitReward = if (shotHit) 10.0 else 0.0
-        val shotMissedReward = if (shotMissed) -1.0 else 0.0
-        val robotHitReward = if (robotHit) -5.0 else 0.0
-        val wallCollisionReward = if (wallCollision) -3.0 else 0.0
+        val shotHitReward = if (shotHit) 5.0 else 0.0
+//        val shotMissedReward = if (shotMissed) -1.0 else 0.0
+        val robotHitReward = if (robotHit) -7.0 else 0.0
+        val wallCollisionReward = if (wallCollision) -5.0 else 0.0
         val robotCollisionReward = if (robotCollision) -3.0 else 0.0
-        val deadReward = if (dead) -10.0 else 0.0
         val energyReward = (observedEnergy - energy) * 0.03
         return shotHitReward +
-            shotMissedReward +
+//            shotMissedReward +
             robotHitReward +
             wallCollisionReward +
             robotCollisionReward +
-            deadReward +
-            energyReward
+            energyReward +
+            getWallProximityPenalty()
+    }
+
+    private fun getWallDistance(): Double {
+        val yDistance = min(y, Y_MAX - y)
+        val xDistance = min(x, X_MAX - x)
+        return min(yDistance, xDistance)
+    }
+
+    private fun getWallProximityPenalty(): Double {
+        val distance = getWallDistance()
+        return if (distance < 50.0) {
+            -((50.0 - distance) / 5.0)
+        } else {
+            0.0
+        }
     }
 
     private fun reset() {
@@ -143,6 +177,7 @@ class QLearningRobot : AdvancedRobot() {
         wallCollision = false
         robotHit = false
         dead = false
+        battleEnded = false
     }
 }
 
@@ -155,13 +190,8 @@ data class Position(val x: Double, val y: Double) {
     fun heading(other: Position): Double {
         val dx = other.x - x
         val dy = other.y - y
-
-        var angle = toDegrees(atan2(dx, dy))
-
-        if (angle < 0) {
-            angle += 360
-        }
-
-        return angle
+        val angleRadians = atan2(dx, dy)
+        val angleDegrees = toDegrees(angleRadians)
+        return (angleDegrees + 360) % 360
     }
 }

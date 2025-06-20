@@ -5,8 +5,12 @@ import robocode.ScannedRobotEvent
 import robocode.HitByBulletEvent
 import robocode.HitWallEvent
 import java.awt.Color
+import kotlin.math.abs
 
 class KotlinBot : AdvancedRobot() {
+
+    private var lastFireTime = 0L
+    private val fireCooldown = 500L
 
     override fun run() {
         // Set colors
@@ -27,27 +31,26 @@ class KotlinBot : AdvancedRobot() {
         }
     }
 
-    override fun onScannedRobot(event: ScannedRobotEvent) {
-        // Calculate absolute bearing to the scanned robot
-        val absoluteBearing = heading + event.bearing
 
-        // Calculate gun turn angle (normalize to -180..180)
+    override fun onScannedRobot(event: ScannedRobotEvent) {
+        val absoluteBearing = heading + event.bearing
         val bearingFromGun = normalizeBearing(absoluteBearing - gunHeading)
 
-        // Turn gun toward the target
         turnGunRight(bearingFromGun)
 
-        // Fire with power depending on distance (closer = more power)
         val firePower = when {
             event.distance < 150 -> 3.0
             event.distance < 300 -> 2.0
             else -> 1.0
         }
-        if (Math.abs(gunTurnRemaining) < 10) {
+
+        val currentTime = System.currentTimeMillis()
+
+        if (abs(gunTurnRemaining) < 10 && currentTime - lastFireTime > fireCooldown) {
             fire(firePower)
+            lastFireTime = currentTime
         }
 
-        // Lock radar on the target by turning it slightly extra
         val bearingFromRadar = normalizeBearing(absoluteBearing - radarHeading)
         turnRadarRight(bearingFromRadar * 1.1)
     }

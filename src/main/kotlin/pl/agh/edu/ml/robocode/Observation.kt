@@ -4,12 +4,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class Observation(
-    val action: Int,
     val xPos: Double,
     val yPos: Double,
     val energy: Double,
-    val velocity: Double,
+    val heading: Double,
     val enemyDistance: Double?,
     val enemyHeading: Double?,
     val wallHit: Int,
-    val robotHit: Int)
+    val robotHit: Int,
+    val done: Boolean)

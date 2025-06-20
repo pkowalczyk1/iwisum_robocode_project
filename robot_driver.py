@@ -12,14 +12,12 @@ from tf_agents.utils import common
 from tf_agents.trajectories import time_step as ts
 from tf_agents.trajectories import trajectory
 from tf_agents.trajectories import policy_step as ps
+from tf_agents.policies import epsilon_greedy_policy
 
 # ------------------------------------------------------------
 # Helper: preprocess_observation
 def preprocess_observation(obs_dict):
-    feature_keys = [
-        "action", "xPos", "yPos", "energy", "velocity",
-        "enemyDistance", "enemyHeading", "wallHit", "robotHit"
-    ]
+    feature_keys = ["xPos", "yPos", "energy", "enemyDistance", "enemyHeading", "wallHit", "robotHit", "heading"]
     obs = obs_dict["observation"]
     state_list = [
         float(obs.get(k, 0.0) if obs.get(k, 0.0) is not None else 0.0)
@@ -56,7 +54,7 @@ def sample_batch(buffer, batch_size=32):
 
 def main():
     host = 'localhost'
-    port = 5000
+    port = 5001
 
     replay_buffer = make_replay_buffer(size=10000)
     batch_size = 32
@@ -98,7 +96,7 @@ def main():
                 q_net = q_network.QNetwork(
                     obs_spec,
                     action_spec,
-                    fc_layer_params=(100, 100)
+                    fc_layer_params=(256, 256)
                 )
                 optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3)
                 train_step = tf.Variable(0)
@@ -111,7 +109,7 @@ def main():
                     train_step_counter=train_step,
                 )
                 agent.initialize()
-                checkpoint_dir = "checkpoint"
+                checkpoint_dir = "checkpoint_2"
                 ckpt = common.Checkpointer(
                     ckpt_dir=checkpoint_dir,
                     agent=agent
@@ -123,6 +121,7 @@ def main():
                 prev_state_np = state_np
                 prev_action = None
                 prev_reward = None
+                rewards_sum = 0
                 while True:
                     step_type = tf.constant([ts.StepType.MID], dtype=tf.int32)
                     reward    = tf.constant([0.0], dtype=tf.float32)
@@ -140,8 +139,11 @@ def main():
                     output_stream.write(f"{action}\n")
                     output_stream.flush()
                     next_obs_json = input_stream.readline().strip()
+                    print(next_obs_json)
                     if not next_obs_json:
                         print("Connection closed by peer.")
+                        with open("results_3.csv", "a") as results:
+                            results.write(f"{rewards_sum}\n")
                         # Save checkpoint here (overwrite last)
                         ckpt.save(train_step)
                         print(f"Agent state saved to checkpoint: {checkpoint_dir}")
@@ -150,6 +152,7 @@ def main():
                     print("Received observation:", next_obs)
                     next_state_np = preprocess_observation(next_obs)
                     reward_val = float(next_obs.get("reward", 0.0))
+                    rewards_sum += reward_val
                     done = False  # You can add a real done flag if your env provides it
 
                     # Add experience to replay buffer
