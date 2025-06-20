@@ -10,6 +10,7 @@ import robocode.HitWallEvent
 import robocode.RobotDeathEvent
 import robocode.RoundEndedEvent
 import robocode.ScannedRobotEvent
+import robocode.WinEvent
 import java.lang.Math.toDegrees
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -35,12 +36,12 @@ class QLearningRobot : AdvancedRobot() {
     private var robotHit: Boolean = false
     private var dead: Boolean = false
     private var battleEnded: Boolean = false
+    private var winner: Boolean = false
 
     private var lastEnemyPosition: Position? = null
 
     override fun run() {
         try {
-//            turnRadarLeft(360.0)
             driver.sendResult(getResult())
             while (true) {
                 val action = driver.getAction()
@@ -75,13 +76,15 @@ class QLearningRobot : AdvancedRobot() {
         battleEnded = true
     }
 
+    override fun onWin(event: WinEvent?) {
+        winner = true
+    }
+
     override fun onScannedRobot(event: ScannedRobotEvent?) {
         if (event == null) {
             return
         }
 
-        fire(5.0)
-        fire(5.0)
         fire(5.0)
         val enemyDistance = event.distance
         val enemyBearing = event.bearing
@@ -126,14 +129,14 @@ class QLearningRobot : AdvancedRobot() {
 
     private fun doAction(action: Action) {
         when (action) {
-            Action.MOVE_FORWARD -> ahead(20.0)
-//            Action.MOVE_FAST_FORWARD -> ahead(40.0)
-            Action.MOVE_BACKWARD -> back(20.0)
-//            Action.MOVE_FAST_BACKWARD -> back(40.0)
-            Action.ROTATE_LEFT -> turnLeft(20.0)
-//            Action.ROTATE_MORE_LEFT -> turnLeft(50.0)
-            Action.ROTATE_RIGHT -> turnRight(20.0)
-//            Action.ROTATE_MORE_RIGHT -> turnRight(50.0)
+//            Action.MOVE_FORWARD -> ahead(20.0)
+            Action.MOVE_FAST_FORWARD -> ahead(40.0)
+//            Action.MOVE_BACKWARD -> back(20.0)
+            Action.MOVE_FAST_BACKWARD -> back(40.0)
+//            Action.ROTATE_LEFT -> turnLeft(20.0)
+            Action.ROTATE_MORE_LEFT -> turnLeft(50.0)
+//            Action.ROTATE_RIGHT -> turnRight(20.0)
+            Action.ROTATE_MORE_RIGHT -> turnRight(50.0)
             Action.SCAN -> turnGunRight(360.0)
         }
     }
@@ -144,9 +147,11 @@ class QLearningRobot : AdvancedRobot() {
         val robotHitReward = if (robotHit) -7.0 else 0.0
         val wallCollisionReward = if (wallCollision) -5.0 else 0.0
         val robotCollisionReward = if (robotCollision) -3.0 else 0.0
+        val winReward = if (winner) 20.0 else 0.0
         val energyReward = (observedEnergy - energy) * 0.03
         return shotHitReward +
 //            shotMissedReward +
+            winReward +
             robotHitReward +
             wallCollisionReward +
             robotCollisionReward +
@@ -178,6 +183,7 @@ class QLearningRobot : AdvancedRobot() {
         robotHit = false
         dead = false
         battleEnded = false
+        winner = false
     }
 }
 

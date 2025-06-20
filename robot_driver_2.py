@@ -20,16 +20,16 @@ from tf_agents.trajectories import policy_step as ps
 
 # ------------------------------------------------------------
 # Hyperparameters
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 REPLAY_BUFFER_SIZE = 100000
 BATCH_SIZE = 64
-TARGET_UPDATE_PERIOD = 1000
+TARGET_UPDATE_PERIOD = 500
 GAMMA = 0.99  # Discount factor
 EPSILON_START = 1.0
 EPSILON_END = 0.01
 TOTAL_DECAY_BATTLES = 1000
 FC_LAYER_PARAMS = (256, 256)  # Network architecture
-CHECKPOINT_DIR = 'dqn_checkpoints_2'
+CHECKPOINT_DIR = 'dqn_checkpoints_3'
 # ------------------------------------------------------------
 
 def preprocess_observation(obs_dict):
@@ -237,9 +237,10 @@ def main():
                         agent.store_experience(state, action, reward, next_state, done)
 
                         # Train
-                        loss = agent.train()
-                        if loss > 0:
-                            print(f"Step: {agent.train_step_counter.numpy()}, Loss: {loss:.4f}")
+                        for _ in range(5):
+                            loss = agent.train()
+                            if loss > 0:
+                                print(f"Step: {agent.train_step_counter.numpy()}, Loss: {loss:.4f}")
 
                         # Update state
                         state = next_state
@@ -250,7 +251,7 @@ def main():
                     agent.save_checkpoint()
 
                     # Write results
-                    with open("results_3.csv", "a") as f:
+                    with open("results_4.csv", "a") as f:
                         f.write(f"{battle_reward}\n")
 
 if __name__ == '__main__':
